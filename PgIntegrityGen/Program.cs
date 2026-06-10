@@ -163,6 +163,8 @@ namespace PgIntegrityGen
             return result;
         }
 
+        static string Esc(string s) => s.Replace("'", "''");
+
         static string GenFkCheck(List<FkConstraint> fks, string scope)
         {
             var sb = new StringBuilder();
@@ -181,14 +183,18 @@ namespace PgIntegrityGen
 
             foreach (var fk in fks)
             {
+                string msg = $"FK VIOLATION [{Esc(fk.ConstraintName)}]: " +
+                             $"{Esc(fk.Table)}.{Esc(fk.Column)} -> " +
+                             $"{Esc(fk.ForeignTable)}.{Esc(fk.ForeignColumn)}  " +
+                             $"orphaned=%";
+
                 sb.AppendLine($"  -- {fk.ConstraintName}");
                 sb.AppendLine($"  SELECT COUNT(*) INTO v_count");
                 sb.AppendLine($"    FROM \"{fk.Table}\" t");
                 sb.AppendLine($"    LEFT JOIN \"{fk.ForeignTable}\" p ON p.\"{fk.ForeignColumn}\" = t.\"{fk.Column}\"");
                 sb.AppendLine($"    WHERE t.\"{fk.Column}\" IS NOT NULL AND p.\"{fk.ForeignColumn}\" IS NULL;");
                 sb.AppendLine($"  IF v_count > 0 THEN");
-                sb.AppendLine($"    RAISE WARNING 'FK VIOLATION [%]: %.% -> %.%  orphaned=%',");
-                sb.AppendLine($"      '{fk.ConstraintName}', '{fk.Table}', '{fk.Column}', '{fk.ForeignTable}', v_count;");
+                sb.AppendLine($"    RAISE WARNING '{msg}', v_count;");
                 sb.AppendLine($"    v_errors := v_errors + 1;");
                 sb.AppendLine($"  END IF;");
                 sb.AppendLine();
@@ -197,7 +203,7 @@ namespace PgIntegrityGen
             sb.AppendLine($"  IF v_errors = 0 THEN");
             sb.AppendLine($"    RAISE NOTICE 'OK: все {fks.Count} FK-ограничений валидны.';");
             sb.AppendLine($"  ELSE");
-            sb.AppendLine($"    RAISE WARNING 'ИТОГ: найдено % нарушений FK.', v_errors;");
+            sb.AppendLine($"    RAISE WARNING 'ИТОГ: найдено % нарушений FK.  Смотри WARNING выше.', v_errors;");
             sb.AppendLine($"  END IF;");
             sb.AppendLine("END $$;");
             return sb.ToString();
