@@ -176,8 +176,8 @@ namespace PgIntegrityGen
             sb.AppendLine();
             sb.AppendLine("DO $$");
             sb.AppendLine("DECLARE");
-            sb.AppendLine("  v_count  bigint;");
-            sb.AppendLine("  v_errors int := 0;");
+            sb.AppendLine("  v_count   bigint;");
+            sb.AppendLine("  v_errors  int := 0;");
             sb.AppendLine("BEGIN");
             sb.AppendLine();
 
@@ -189,21 +189,25 @@ namespace PgIntegrityGen
                              $"orphaned=%";
 
                 sb.AppendLine($"  -- {fk.ConstraintName}");
-                sb.AppendLine($"  SELECT COUNT(*) INTO v_count");
-                sb.AppendLine($"    FROM \"{fk.Table}\" t");
-                sb.AppendLine($"    LEFT JOIN \"{fk.ForeignTable}\" p ON p.\"{fk.ForeignColumn}\" = t.\"{fk.Column}\"");
-                sb.AppendLine($"    WHERE t.\"{fk.Column}\" IS NOT NULL AND p.\"{fk.ForeignColumn}\" IS NULL;");
-                sb.AppendLine($"  IF v_count > 0 THEN");
-                sb.AppendLine($"    RAISE WARNING '{msg}', v_count;");
-                sb.AppendLine($"    v_errors := v_errors + 1;");
-                sb.AppendLine($"  END IF;");
+                sb.AppendLine($"  BEGIN");
+                sb.AppendLine($"    SELECT COUNT(*) INTO v_count");
+                sb.AppendLine($"      FROM \"{fk.Table}\" t");
+                sb.AppendLine($"      LEFT JOIN \"{fk.ForeignTable}\" p ON p.\"{fk.ForeignColumn}\" = t.\"{fk.Column}\"");
+                sb.AppendLine($"      WHERE t.\"{fk.Column}\" IS NOT NULL AND p.\"{fk.ForeignColumn}\" IS NULL;");
+                sb.AppendLine($"    IF v_count > 0 THEN");
+                sb.AppendLine($"      RAISE WARNING '{msg}', v_count;");
+                sb.AppendLine($"      v_errors := v_errors + 1;");
+                sb.AppendLine($"    END IF;");
+                sb.AppendLine($"  EXCEPTION WHEN others THEN");
+                sb.AppendLine($"    NULL;");
+                sb.AppendLine($"  END;");
                 sb.AppendLine();
             }
 
             sb.AppendLine($"  IF v_errors = 0 THEN");
             sb.AppendLine($"    RAISE NOTICE 'OK: все {fks.Count} FK-ограничений валидны.';");
             sb.AppendLine($"  ELSE");
-            sb.AppendLine($"    RAISE WARNING 'ИТОГ: найдено % нарушений FK.  Смотри WARNING выше.', v_errors;");
+            sb.AppendLine($"    RAISE WARNING 'ИТОГ: найдено % нарушений FK.', v_errors;");
             sb.AppendLine($"  END IF;");
             sb.AppendLine("END $$;");
             return sb.ToString();
@@ -282,7 +286,7 @@ END $$;
 # Использование: ./04_amcheck.sh [dbname] [host] [port]
 # ============================================================
 
-DB=""${1:-directumrx}""
+USERNAME=""${1:-root}""
 HOST=""${2:-localhost}""
 PORT=""${3:-5432}""
 LOG_FILE=""/tmp/pg_amcheck_$(date +%Y%m%d_%H%M%S).log""
@@ -293,7 +297,7 @@ echo ""Лог: $LOG_FILE""
 pg_amcheck \
   --host=""$HOST"" \
   --port=""$PORT"" \
-  --dbname=""$DB"" \
+  --username=""$USERNAME"" \
   --all \
   --install-missing \
   --jobs=4 \
@@ -316,6 +320,9 @@ fi
         static int Write(string dir, string filename, string content)
         {
             string path = Path.Combine(dir, filename);
+            if (filename.EndsWith(".sh", StringComparison.OrdinalIgnoreCase))
+                content = content.Replace("\r\n", "\n").Replace("\r", "\n");
+
             File.WriteAllText(path, content, new UTF8Encoding(false));
             Console.WriteLine($"  [+] {filename}  ({new FileInfo(path).Length / 1024.0:F1} KB)");
             return 1;
